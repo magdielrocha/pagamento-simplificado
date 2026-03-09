@@ -2,10 +2,14 @@ package com.pagamentosimplificado.services;
 
 import com.pagamentosimplificado.domain.user.User;
 import com.pagamentosimplificado.domain.user.UserType;
+import com.pagamentosimplificado.dtos.user.UserDTO;
+import com.pagamentosimplificado.exceptions.BusinessException;
 import com.pagamentosimplificado.repositories.UserRepository;
+import jakarta.validation.Valid;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 public class UserService {
@@ -16,25 +20,24 @@ public class UserService {
         this.userRepository = userRepository;
     }
 
-
-    public void validateTransaction(User sender, BigDecimal amount) throws Exception {
-
-        if(sender.getUserType() == UserType.MERCHANT) {
-            throw new Exception("User is not authorized to perform this transaction");
-        }
-
-        if(sender.getBalance().compareTo(amount) <= 0) {
-            throw new Exception("Insufficient balance");
-        }
-
+    public User findUserById(long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("User not found"));
     }
 
-    public User findUserById(long id) throws Exception {
-        return this.userRepository.findUserById(id).orElseThrow(() -> new Exception("User not found"));
+    public User createUser(@Valid UserDTO data) {
+        User newUser = new User(data);
+        this.saveUser(newUser);
+        return newUser;
     }
 
-    public User createUser(User user) {
+    public List<User> getAllUsers() {
+        return this.userRepository.findAll();
+    }
+
+    public User saveUser(User user) {
         return userRepository.save(user);
     }
+
 
 }
