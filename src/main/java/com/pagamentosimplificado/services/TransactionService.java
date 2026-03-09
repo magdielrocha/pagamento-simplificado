@@ -2,12 +2,15 @@ package com.pagamentosimplificado.services;
 
 import com.pagamentosimplificado.domain.transaction.Transaction;
 import com.pagamentosimplificado.domain.user.User;
-import com.pagamentosimplificado.dtos.TransactionDTO;
+import com.pagamentosimplificado.dtos.authorization.AuthorizationResponseDTO;
+import com.pagamentosimplificado.dtos.transaction.TransactionDTO;
+import com.pagamentosimplificado.exceptions.BusinessException;
 import com.pagamentosimplificado.repositories.TransactionRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,15 +37,16 @@ public class TransactionService {
         this.restTemplate = restTemplate;
     }
 
-    public void createTransaction(TransactionDTO transaction) throws Exception {
-        User sender = this.userService.findUserById(transaction.senderId());
-        User receiver = this.userService.findUserById(transaction.receiverId());
+@Transactional
+    public void createTransaction(TransactionDTO transaction) {
 
-        userService.validateTransaction(sender, transaction.value());
 
-        boolean isAuthorized = this.authorizedTransaction(sender, transaction.value());
-        if(!isAuthorized) {
-            throw new Exception("Transaction not authorized");
+        User sender = userService.findUserById(transaction.senderId());
+        User receiver = userService.findUserById(transaction.receiverId());
+
+
+        if(!isAuthorizedTransaction()) {
+            throw new BusinessException("Transaction not authorized");
         }
 
         // creating a transaction
@@ -53,27 +57,28 @@ public class TransactionService {
         newTransaction.setTimestamp(LocalDateTime.now());
 
         // updating the balance
-        sender.setBalance(sender.getBalance().subtract(transaction.value()));
-        receiver.setBalance(receiver.getBalance().add(transaction.value()));
+        sender.debit(transaction.value());
+        receiver.credit(transaction.value());
 
         // persisting the data
-        this.transactionRepository.save(newTransaction);
-        this.userService.createUser(sender);
-        this.userService.createUser(receiver);
+        transactionRepository.save(newTransaction);
 
     }
 
-    public boolean authorizedTransaction(User sender, BigDecimal value) {
+    public boolean isAuthorizedTransaction() {
 
-        ResponseEntity<AuthorizationResponse> response =
-                restTemplate.getForEntity(authorizationServiceUrl, AuthorizationResponse.class);
+        ResponseEntity<AuthorizationResponseDTO> response =
+                restTemplate.getForEntity(
+                        authorizationServiceUrl,
+                        AuthorizationResponseDTO.class
+                );
 
-        if(response.getStatusCode() == HttpStatus.OK) {
-            String message = response.getBody().message();
-            return "Authorized".equals(message);
-        } else return false;
+        return response.getStatusCode().is2xxSuccessful()
+            && response.getBody() != null
+            && "success".equals(response.getBody().status())
+            && response.getBody().data() != null
+            && response.getBody().data().authorization();
 
     }
-
 
 }

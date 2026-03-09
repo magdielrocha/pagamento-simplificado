@@ -1,4 +1,6 @@
 package com.pagamentosimplificado.dtos.authorization;
 
-public record AuthorizationData() {
+public record AuthorizationData(
+        Boolean authorization
+) {
 }
